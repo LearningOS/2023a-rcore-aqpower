@@ -89,24 +89,43 @@ impl PageTable {
     }
     /// Find PageTableEntry by VirtPageNum, create a frame for a 4KB page table if not exist
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+        // 从虚拟页号获取其对应的索引
         let idxs = vpn.indexes();
+        // 初始化物理页号为根节点的物理页号
         let mut ppn = self.root_ppn;
+        // 初始化结果为可变引用
         let mut result: Option<&mut PageTableEntry> = None;
+
+        // 遍历虚拟页号对应的索引数组
         for (i, idx) in idxs.iter().enumerate() {
+            // 获取当前节点的页表项数组中的项，以及其中包含的页表项
             let pte = &mut ppn.get_pte_array()[*idx];
+
+            // 如果当前是最后一级页表项
             if i == 2 {
+                // 将结果设置为当前页表项的可变引用
                 result = Some(pte);
                 break;
             }
+
+            // 如果当前页表项无效（未初始化）
             if !pte.is_valid() {
+                // 分配一个新的物理页帧
                 let frame = frame_alloc().unwrap();
+                // 创建一个新的页表项，设置有效标志位 V，并将其赋值给当前页表项
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                // 将分配的物理页帧添加到向量 frames 中，用于后续的自动回收
                 self.frames.push(frame);
             }
+
+            // 更新 ppn 为下级节点的物理页号
             ppn = pte.ppn();
         }
+
+        // 返回查找到的页表项的可变引用
         result
     }
+
     /// Find PageTableEntry by VirtPageNum
     fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
