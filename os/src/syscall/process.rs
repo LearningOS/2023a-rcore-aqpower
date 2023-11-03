@@ -4,12 +4,13 @@ use core::mem::size_of;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
-    mm::translated_byte_buffer,
+    mm::{translated_byte_buffer, MapPermission, VirtAddr},
     task::{
-        change_program_brk, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, get_current_task, get_task_bucket, get_task_first_dispatch_time,
+        change_program_brk, current_user_token, exit_current_and_run_next, get_current_task,
+        get_task_bucket, get_task_first_dispatch_time, insert_area, suspend_current_and_run_next,
+        TaskStatus,
     },
-    timer::{get_time_us, get_time_ms},
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -77,10 +78,14 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         *_ti = TaskInfo {
             status: TaskStatus::Running,
             syscall_times: bucket,
-            time: time_distance
+            time: time_distance,
         };
     }
-    let buffers = translated_byte_buffer(current_user_token(), _ti as *const u8, size_of::<TaskInfo>());
+    let buffers = translated_byte_buffer(
+        current_user_token(),
+        _ti as *const u8,
+        size_of::<TaskInfo>(),
+    );
     for buffer in buffers {
         let task_info_ptr: *mut TaskInfo = buffer.as_mut_ptr() as *mut TaskInfo;
         unsafe {
@@ -104,14 +109,32 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
  * port：第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
  */
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_mmap");
+    debug!("start: {:#b}, len: {}", _start, _len);
+    let virt_add = VirtAddr::from(_start);
+    if virt_add.aligned() == false || _port & !0x7 != 0 || _port & 0x7 == 0 || _len != 4096{
+        debug!("error1 port");
+        return -1;
+    }
+    let mut map_p = MapPermission::U;
+    if (_port & 0b0001) != 0 {
+        map_p = map_p | MapPermission::R;
+    }
+    if (_port & 0b0010) != 0 {
+        map_p = map_p | MapPermission::W;
+    }
+    if (_port & 0b0100) != 0 {
+        map_p = map_p | MapPermission::X;
+    }
 
+    insert_area(virt_add, VirtAddr::from(_start + _len), map_p);
     0
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    
     0
 }
 /// change data segment size

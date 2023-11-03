@@ -16,6 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{VirtPageNum, VirtAddr, MapPermission};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
@@ -143,7 +144,7 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
-            
+
             // ! 设置了第一次被调度的时间
             if inner.tasks[current].task_first_dispatch_time == 0 {
                 inner.tasks[current].task_first_dispatch_time = get_time_ms();
@@ -180,6 +181,29 @@ impl TaskManager {
 
     fn get_task_first_dispatch_time(&self, task_id: usize) -> usize {
         self.inner.exclusive_access().tasks[task_id].task_first_dispatch_time
+    }
+
+    fn insert_area(&self, start_va:VirtAddr, end_va:VirtAddr, map_permission:MapPermission) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        
+        if let Some(_elem) = inner.tasks[current].memory_set.translate(VirtPageNum::from(start_va)){
+            debug!("error2 translate: aleady exits!");
+            return -1;
+        } else {
+            debug!("start not found");
+        }
+
+        if let Some(_elem) = inner.tasks[current].memory_set.translate(VirtPageNum::from(end_va)){
+            debug!("error2 translate: aleady exits!");
+            return -1;
+        } else {
+            debug!("end not found");
+        }
+
+        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, map_permission);
+        
+        0
     }
 }
 
@@ -249,4 +273,10 @@ pub fn get_task_bucket(task_id: usize) -> [u32; MAX_SYSCALL_NUM] {
 /// get task first dispatch time
 pub fn get_task_first_dispatch_time(task_id: usize) -> usize {
     TASK_MANAGER.get_task_first_dispatch_time(task_id)
+}
+
+
+/// insert area
+pub fn insert_area(start_va:VirtAddr, end_va:VirtAddr, map_permission:MapPermission) -> isize {
+    TASK_MANAGER.insert_area(start_va, end_va, map_permission)
 }
