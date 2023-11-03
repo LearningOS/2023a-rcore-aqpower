@@ -14,8 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -78,6 +80,8 @@ impl TaskManager {
     fn run_first_task(&self) -> ! {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
+        // ! 设置了第一次被调度的时间
+        next_task.task_first_dispatch_time = get_time_ms();
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
@@ -139,6 +143,12 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
+            
+            // ! 设置了第一次被调度的时间
+            if inner.tasks[current].task_first_dispatch_time == 0 {
+                inner.tasks[current].task_first_dispatch_time = get_time_ms();
+            }
+
             inner.tasks[next].task_status = TaskStatus::Running;
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
@@ -152,6 +162,24 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    fn get_current_task(&self) -> usize {
+        self.inner.exclusive_access().current_task
+    }
+
+    fn insert_syscall_count(&self, task_id: usize, syscall_id: usize) {
+        self.inner.exclusive_access().tasks[task_id].task_syscall_bucket[syscall_id] += 1;
+    }
+
+    fn get_task_bucket(&self, task_id: usize) -> [u32; MAX_SYSCALL_NUM] {
+        self.inner.exclusive_access().tasks[task_id]
+            .task_syscall_bucket
+            .clone()
+    }
+
+    fn get_task_first_dispatch_time(&self, task_id: usize) -> usize {
+        self.inner.exclusive_access().tasks[task_id].task_first_dispatch_time
     }
 }
 
@@ -201,4 +229,24 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// get the current task id
+pub fn get_current_task() -> usize {
+    TASK_MANAGER.get_current_task()
+}
+
+/// insert task syscall count
+pub fn insert_syscall_count(task_id: usize, syscall_id: usize) {
+    TASK_MANAGER.insert_syscall_count(task_id, syscall_id)
+}
+
+/// get current task bucket
+pub fn get_task_bucket(task_id: usize) -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_task_bucket(task_id).clone()
+}
+
+/// get task first dispatch time
+pub fn get_task_first_dispatch_time(task_id: usize) -> usize {
+    TASK_MANAGER.get_task_first_dispatch_time(task_id)
 }

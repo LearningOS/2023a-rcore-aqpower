@@ -7,9 +7,9 @@ use crate::{
     mm::translated_byte_buffer,
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        suspend_current_and_run_next, TaskStatus, get_current_task, get_task_bucket, get_task_first_dispatch_time,
     },
-    timer::get_time_us,
+    timer::{get_time_us, get_time_ms},
 };
 
 #[repr(C)]
@@ -68,13 +68,44 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_task_info");
+    let current_task = get_current_task();
+    let bucket = get_task_bucket(current_task);
+    let first_time = get_task_first_dispatch_time(current_task);
+    let time_distance = get_time_ms() - first_time;
+    unsafe {
+        *_ti = TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: bucket,
+            time: time_distance
+        };
+    }
+    let buffers = translated_byte_buffer(current_user_token(), _ti as *const u8, size_of::<TaskInfo>());
+    for buffer in buffers {
+        let task_info_ptr: *mut TaskInfo = buffer.as_mut_ptr() as *mut TaskInfo;
+        unsafe {
+            let task_info = &mut *task_info_ptr;
+            task_info.status = TaskStatus::Running;
+            task_info.syscall_times = bucket;
+            task_info.time = time_distance;
+        }
+        break;
+    }
     0
 }
 
 // YOUR JOB: Implement mmap.
+// 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块）
+// 将其映射到 start 开始的虚存，内存页属性为 port
+/**
+ * 参数：
+ * start 需要映射的虚存起始地址，要求按页对齐
+ * len 映射字节长度，可以为 0
+ * port：第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
+ */
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+
     0
 }
 
