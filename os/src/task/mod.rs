@@ -42,6 +42,7 @@ pub fn suspend_current_and_run_next() {
 
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
+    // !way to change the value 
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
@@ -59,7 +60,7 @@ pub const IDLE_PID: usize = 0;
 
 /// Exit the current 'Running' task and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32) {
-    // take from Processor
+    // take from Processor 取出，而不只是得到一份拷贝，这是为了正确维护进程控制块的引用计数；
     let task = take_current_task().unwrap();
 
     let pid = task.getpid();

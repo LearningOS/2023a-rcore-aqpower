@@ -241,6 +241,7 @@ impl MemorySet {
         // copy data sections/trap_context/user_stack
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
+            // !在插入的时候就已经实际分配了物理页帧了。
             memory_set.push(new_area, None);
             // copy data from another space
             for vpn in area.vpn_range {

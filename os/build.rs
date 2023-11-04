@@ -41,6 +41,9 @@ _num_app:
     }
     writeln!(f, r#"    .quad app_{}_end"#, apps.len() - 1)?;
 
+    // 各个应用的名字通过 .string 伪指令放到数据段中
+    // 注意链接器会自动在每个字符串的结尾加入分隔符 \0 
+    // 它们的位置由全局符号 _app_names 指出。
     writeln!(
         f,
         r#"
