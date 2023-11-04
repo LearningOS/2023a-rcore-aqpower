@@ -56,12 +56,14 @@ lazy_static! {
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
+        // Round robin 轮转调度
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            // report first dispatch time
             if task_inner.task_first_dispatch_time  == 0 {
                 task_inner.task_first_dispatch_time = get_time_ms();
             }
@@ -79,6 +81,12 @@ pub fn run_tasks() {
         }
     }
 }
+
+
+// pub fn stride_run() {
+//     ()
+// }
+
 
 /// Get current task through take, leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {

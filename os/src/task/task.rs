@@ -75,6 +75,12 @@ pub struct TaskControlBlockInner {
 
     /// the task first dispatch time
     pub task_first_dispatch_time: usize,
+
+    /// the task stride 该进程当前的调度权
+    pub stride: u128,
+
+    /// the task pass of stride
+    pub pass: isize
 }
 
 impl TaskControlBlockInner {
@@ -135,6 +141,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     task_syscall_bucket: [0; MAX_SYSCALL_NUM],
                     task_first_dispatch_time: 0,
+                    stride: 0,
+                    pass: 16
                 })
             },
         };
@@ -210,6 +218,8 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     task_syscall_bucket: [0; MAX_SYSCALL_NUM],
                     task_first_dispatch_time: 0,
+                    stride: 0,
+                    pass: 16
                 })
             },
         });
