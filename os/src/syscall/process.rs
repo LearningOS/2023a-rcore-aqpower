@@ -7,8 +7,8 @@ use crate::{
     mm::{translated_byte_buffer, MapPermission, VirtAddr},
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_task,
-        get_task_bucket, get_task_first_dispatch_time, insert_area, suspend_current_and_run_next,
-        TaskStatus, remove_area,
+        get_task_bucket, get_task_first_dispatch_time, insert_area, remove_area,
+        suspend_current_and_run_next, TaskStatus,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -52,11 +52,11 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     let buffers =
         translated_byte_buffer(current_user_token(), _ts as *const u8, size_of::<TimeVal>());
-    let us = get_time_us();
     for buffer in buffers {
         let time_val_ptr: *mut TimeVal = buffer.as_mut_ptr() as *mut TimeVal;
         unsafe {
             let time_val = &mut *time_val_ptr;
+            let us = get_time_us();
             time_val.sec = us / 1_000_000;
             time_val.usec = us % 1_000_000;
         }
@@ -69,12 +69,13 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+    debug!("start sys task info : {}", get_time_ms());
     trace!("kernel: sys_task_info");
     let current_task = get_current_task();
     let bucket = get_task_bucket(current_task);
     let first_time = get_task_first_dispatch_time(current_task);
-    debug!("now: {} fir: {:?}", get_time_ms(),first_time);
-    let time_distance = get_time_ms() - first_time;
+    let ms = get_time_ms();
+    debug!("now: {} fir: {:?}", ms, first_time);
     let buffers = translated_byte_buffer(
         current_user_token(),
         _ti as *const u8,
@@ -83,6 +84,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     for buffer in buffers {
         let task_info_ptr: *mut TaskInfo = buffer.as_mut_ptr() as *mut TaskInfo;
         unsafe {
+            let time_distance = ms - first_time;
             let task_info = &mut *task_info_ptr;
             task_info.status = TaskStatus::Running;
             task_info.syscall_times = bucket;
@@ -120,7 +122,10 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap");
     let virt_add = VirtAddr::from(_start);
-    remove_area(virt_add, VirtAddr::from(_start + ((_len + 4095) / 4096) * 4096))
+    remove_area(
+        virt_add,
+        VirtAddr::from(_start + ((_len + 4095) / 4096) * 4096),
+    )
 }
 
 /// change data segment size
