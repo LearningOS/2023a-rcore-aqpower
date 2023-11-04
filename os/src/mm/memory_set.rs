@@ -63,6 +63,70 @@ impl MemorySet {
             None,
         );
     }
+
+    /// 1
+    pub fn pop(&mut self, start_va: VirtAddr, _end_va: VirtAddr) -> isize {
+        let mut index = 0;
+        println!("pop {}", index);
+        if let Some((_index, area)) = self
+            .areas
+            .iter_mut()
+            .enumerate()
+            .find(|(_, area)| area.vpn_range.get_start() == VirtPageNum::from(start_va))
+        {
+            index = _index;
+            debug!("remove index:{}", _index);
+            area.unmap(&mut self.page_table);
+        } else {
+            return -1;
+        }
+        println!("pop {}", index);
+        self.areas.remove(index);
+        0
+    }
+
+    /// 12
+    pub fn is_cover(&mut self, start_va: VirtAddr, _end_va: VirtAddr) -> bool {
+        let start_vpn = start_va.ceil();
+        let end_vpn = _end_va.floor();
+        debug!("st_va: {:?} end_va {:?}", start_vpn, end_vpn);
+        if let Some((_index, _area)) = self.areas.iter_mut().enumerate().find(|(_, area)| {
+            println!(
+                "range_st_vpn: {:?} range_end_vpn:{:?}",
+                area.vpn_range.get_start(),
+                area.vpn_range.get_end()
+            );
+            (area.vpn_range.get_start() <= start_vpn && area.vpn_range.get_end() >= end_vpn)
+                || (start_vpn < area.vpn_range.get_start() && end_vpn > area.vpn_range.get_start())
+                || (start_vpn < area.vpn_range.get_end() && end_vpn > area.vpn_range.get_end())
+        }) {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 1
+    pub fn is_gain(&mut self, start_va: VirtAddr, _end_va: VirtAddr) -> bool {
+        let start_vpn = start_va.ceil();
+        let end_vpn = _end_va.floor();
+        debug!("st_va: {:?} end_va {:?}", start_vpn, end_vpn);
+        if let Some((_index, _area)) = self.areas.iter_mut().enumerate().find(|(_, area)| {
+            println!(
+                "range_st_vpn: {:?} range_end_vpn:{:?}",
+                area.vpn_range.get_start(),
+                area.vpn_range.get_end()
+            );
+            area.vpn_range.get_start() == start_vpn && area.vpn_range.get_end() == end_vpn
+        }) {
+            true
+        } else {
+            false
+        }
+    }
+
+
+
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {

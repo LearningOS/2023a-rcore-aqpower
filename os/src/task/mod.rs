@@ -16,7 +16,7 @@ mod task;
 
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
-use crate::mm::{VirtPageNum, VirtAddr, MapPermission};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
@@ -183,27 +183,38 @@ impl TaskManager {
         self.inner.exclusive_access().tasks[task_id].task_first_dispatch_time
     }
 
-    fn insert_area(&self, start_va:VirtAddr, end_va:VirtAddr, map_permission:MapPermission) -> isize {
+    fn insert_area(
+        &self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+        map_permission: MapPermission,
+    ) -> isize {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        
-        if let Some(_elem) = inner.tasks[current].memory_set.translate(VirtPageNum::from(start_va)){
-            debug!("error2 translate: aleady exits!");
+
+        debug!("insert_area: {:?} to {:?}", start_va, end_va);
+
+        if inner.tasks[current].memory_set.is_cover(start_va, end_va) {
             return -1;
-        } else {
-            debug!("start not found");
         }
 
-        if let Some(_elem) = inner.tasks[current].memory_set.translate(VirtPageNum::from(end_va)){
-            debug!("error2 translate: aleady exits!");
-            return -1;
-        } else {
-            debug!("end not found");
-        }
+        inner.tasks[current]
+            .memory_set
+            .insert_framed_area(start_va, end_va, map_permission);
 
-        inner.tasks[current].memory_set.insert_framed_area(start_va, end_va, map_permission);
-        
         0
+    }
+
+    fn remove_area(&self, start_va: VirtAddr, end_va: VirtAddr) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+
+        if inner.tasks[current].memory_set.is_gain(start_va, end_va) == false {
+            debug!("not found area!");
+            return -1;
+        }
+
+        inner.tasks[current].memory_set.pop(start_va, end_va)
     }
 }
 
@@ -275,8 +286,12 @@ pub fn get_task_first_dispatch_time(task_id: usize) -> usize {
     TASK_MANAGER.get_task_first_dispatch_time(task_id)
 }
 
-
 /// insert area
-pub fn insert_area(start_va:VirtAddr, end_va:VirtAddr, map_permission:MapPermission) -> isize {
+pub fn insert_area(start_va: VirtAddr, end_va: VirtAddr, map_permission: MapPermission) -> isize {
     TASK_MANAGER.insert_area(start_va, end_va, map_permission)
+}
+
+/// 1
+pub fn remove_area(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    TASK_MANAGER.remove_area(start_va, end_va)
 }

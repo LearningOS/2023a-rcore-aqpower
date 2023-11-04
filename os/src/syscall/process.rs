@@ -8,7 +8,7 @@ use crate::{
     task::{
         change_program_brk, current_user_token, exit_current_and_run_next, get_current_task,
         get_task_bucket, get_task_first_dispatch_time, insert_area, suspend_current_and_run_next,
-        TaskStatus,
+        TaskStatus, remove_area,
     },
     timer::{get_time_ms, get_time_us},
 };
@@ -110,33 +110,25 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
  */
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap");
-    debug!("start: {:#b}, len: {}", _start, _len);
     let virt_add = VirtAddr::from(_start);
-    if virt_add.aligned() == false || _port & !0x7 != 0 || _port & 0x7 == 0 || _len != 4096{
+    let end_va = _start + ((_len + 4095) / 4096) * 4096;
+    if virt_add.aligned() == false || _port & !0x7 != 0 || _port & 0x7 == 0 {
         debug!("error1 port");
         return -1;
     }
-    let mut map_p = MapPermission::U;
-    if (_port & 0b0001) != 0 {
-        map_p = map_p | MapPermission::R;
-    }
-    if (_port & 0b0010) != 0 {
-        map_p = map_p | MapPermission::W;
-    }
-    if (_port & 0b0100) != 0 {
-        map_p = map_p | MapPermission::X;
-    }
-
-    insert_area(virt_add, VirtAddr::from(_start + _len), map_p);
-    0
+    let mut permission = MapPermission::from_bits((_port as u8) << 1).unwrap();
+    permission.set(MapPermission::U, true);
+    insert_area(virt_add, VirtAddr::from(end_va), permission)
 }
 
 // YOUR JOB: Implement munmap.
+// 取消到 [start, start + len) 虚存的映射
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    
-    0
+    trace!("kernel: sys_munmap");
+    let virt_add = VirtAddr::from(_start);
+    remove_area(virt_add, VirtAddr::from(_start + ((_len + 4095) / 4096) * 4096))
 }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
     trace!("kernel: sys_sbrk");
