@@ -21,7 +21,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{
+    loader::get_app_data_by_name,
+    mm::{MapPermission, VirtAddr},
+};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -42,7 +45,7 @@ pub fn suspend_current_and_run_next() {
 
     // ---- access current TCB exclusively
     let mut task_inner = task.inner_exclusive_access();
-    // !way to change the value 
+    // !way to change the value
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
@@ -115,4 +118,36 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// make an address map in user memory set
+pub fn insert_area(start_va: VirtAddr, end_va: VirtAddr, map_permission: MapPermission) -> isize {
+    let  task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+
+    debug!("insert_area: {:?} to {:?}", start_va, end_va);
+
+    if inner.memory_set.is_cover(start_va, end_va) {
+        return -1;
+    }
+
+    inner
+        .memory_set
+        .insert_framed_area(start_va, end_va, map_permission);
+
+    0
+}
+
+/// remove area from st_va to end_va in user memory set
+pub fn remove_area(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+
+
+    if inner.memory_set.is_gain(start_va, end_va) == false {
+        debug!("not found area!");
+        return -1;
+    }
+
+    inner.memory_set.pop(start_va, end_va)
 }

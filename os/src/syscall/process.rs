@@ -6,11 +6,12 @@ use alloc::sync::Arc;
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str, translated_byte_buffer},
+    mm::{translated_byte_buffer, translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus, TaskControlBlock,
-    }, timer::get_time_us,
+        add_task, current_task, current_user_token, exit_current_and_run_next, insert_area,
+        suspend_current_and_run_next, TaskControlBlock, TaskStatus, remove_area,
+    },
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -151,25 +152,54 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    let bucket = inner.get_task_bucket();
+    let first_time = inner.get_task_first_dispatch_time();
+    drop(inner);
+    let ms = get_time_ms();
+    debug!("now: {} fir: {:?}", ms, first_time);
+    let buffers = translated_byte_buffer(
+        current_user_token(),
+        _ti as *const u8,
+        size_of::<TaskInfo>(),
+    );
+    for buffer in buffers {
+        let task_info_ptr: *mut TaskInfo = buffer.as_mut_ptr() as *mut TaskInfo;
+        unsafe {
+            let time_distance = ms - first_time;
+            let task_info = &mut *task_info_ptr;
+            task_info.status = TaskStatus::Running;
+            task_info.syscall_times = bucket;
+            task_info.time = time_distance;
+        }
+        break;
+    }
+    0
 }
 
 /// YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_mmap");
+    let virt_add = VirtAddr::from(_start);
+    let end_va = _start + ((_len + 4095) / 4096) * 4096;
+    if virt_add.aligned() == false || _port & !0x7 != 0 || _port & 0x7 == 0 {
+        debug!("error1 port");
+        return -1;
+    }
+    let mut permission = MapPermission::from_bits((_port as u8) << 1).unwrap();
+    permission.set(MapPermission::U, true);
+    insert_area(virt_add, VirtAddr::from(end_va), permission)
 }
 
 /// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    trace!("kernel: sys_munmap");
+    let virt_add = VirtAddr::from(_start);
+    remove_area(
+        virt_add,
+        VirtAddr::from(_start + ((_len + 4095) / 4096) * 4096),
+    )
 }
 
 /// change data segment size
@@ -197,11 +227,14 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     if let Some(elf_data) = get_app_data_by_name(path.as_str()) {
         let new_task = Arc::new(TaskControlBlock::new(elf_data));
         let new_pid = new_task.pid.0;
-        current_task.inner_exclusive_access().children.push(new_task.clone());
+        current_task
+            .inner_exclusive_access()
+            .children
+            .push(new_task.clone());
         add_task(new_task);
         new_pid as isize
     } else {
-        return -1
+        return -1;
     }
 }
 

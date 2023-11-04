@@ -17,7 +17,8 @@ mod context;
 use crate::config::{TRAMPOLINE, TRAP_CONTEXT_BASE};
 use crate::syscall::syscall;
 use crate::task::{
-    current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+    current_task, current_trap_cx, current_user_token, exit_current_and_run_next,
+    suspend_current_and_run_next,
 };
 use crate::timer::set_next_trigger;
 use core::arch::{asm, global_asm};
@@ -53,6 +54,14 @@ pub fn enable_timer_interrupt() {
     }
 }
 
+/// add syscall count
+pub fn add_syscall_count(syscall_id: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .task_syscall_bucket[syscall_id] += 1;
+}
+
 /// trap handler
 #[no_mangle]
 pub fn trap_handler() -> ! {
@@ -62,9 +71,9 @@ pub fn trap_handler() -> ! {
     // trace!("into {:?}", scause.cause());
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
-            // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
+            add_syscall_count(cx.x[17]);
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
