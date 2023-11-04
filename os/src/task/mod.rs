@@ -82,7 +82,9 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         // ! 设置了第一次被调度的时间
-        next_task.task_first_dispatch_time = get_time_ms();
+        if next_task.task_first_dispatch_time == 0 {
+            next_task.task_first_dispatch_time = get_time_ms();
+        }
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);

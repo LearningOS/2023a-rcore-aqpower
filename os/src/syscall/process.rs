@@ -73,14 +73,8 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     let current_task = get_current_task();
     let bucket = get_task_bucket(current_task);
     let first_time = get_task_first_dispatch_time(current_task);
+    debug!("now: {} fir: {:?}", get_time_ms(),first_time);
     let time_distance = get_time_ms() - first_time;
-    unsafe {
-        *_ti = TaskInfo {
-            status: TaskStatus::Running,
-            syscall_times: bucket,
-            time: time_distance,
-        };
-    }
     let buffers = translated_byte_buffer(
         current_user_token(),
         _ti as *const u8,
