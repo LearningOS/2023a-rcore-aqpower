@@ -121,7 +121,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // ---- release current PCB automatically
 }
 
-/// YOUR JOB: get time with second and microsecond
+/// get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
@@ -144,7 +144,7 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
-/// YOUR JOB: Finish sys_task_info to pass testcases
+/// Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
@@ -178,7 +178,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     0
 }
 
-/// YOUR JOB: Implement mmap.
+/// Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap");
     let virt_add = VirtAddr::from(_start);
@@ -192,7 +192,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     insert_area(virt_add, VirtAddr::from(end_va), permission)
 }
 
-/// YOUR JOB: Implement munmap.
+/// Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap");
     let virt_add = VirtAddr::from(_start);
@@ -238,7 +238,7 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     }
 }
 
-// YOUR JOB: Set task priority.
+//  Set task priority.
 pub fn sys_set_priority(_prio: isize) -> isize {
     trace!(
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
@@ -249,6 +249,7 @@ pub fn sys_set_priority(_prio: isize) -> isize {
     }
     let task = current_task().unwrap();
     let mut inner = task.inner_exclusive_access();
-    inner.pass = _prio;
+    inner.priority = _prio as usize;
+    debug!("update: {}", inner.priority);
     _prio
 }

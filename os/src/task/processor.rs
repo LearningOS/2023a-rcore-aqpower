@@ -4,9 +4,10 @@
 //! the current running state of CPU is recorded,
 //! and the replacement and transfer of control flow of different applications are executed.
 
-use super::__switch;
-use super::{fetch_task, TaskStatus};
+use super::manager::fetch_stride_least_task;
 use super::{TaskContext, TaskControlBlock};
+use super::{TaskStatus, __switch};
+use crate::config::BIG_STRIDE;
 use crate::sync::UPSafeCell;
 use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
@@ -57,14 +58,16 @@ pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
         // Round robin 轮转调度
-        if let Some(task) = fetch_task() {
+        if let Some(task) = fetch_stride_least_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            // update the stride
+            task_inner.stride += BIG_STRIDE / task_inner.priority;
             // report first dispatch time
-            if task_inner.task_first_dispatch_time  == 0 {
+            if task_inner.task_first_dispatch_time == 0 {
                 task_inner.task_first_dispatch_time = get_time_ms();
             }
             // release coming task_inner manually
@@ -82,11 +85,9 @@ pub fn run_tasks() {
     }
 }
 
-
 // pub fn stride_run() {
 //     ()
 // }
-
 
 /// Get current task through take, leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {

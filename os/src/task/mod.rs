@@ -62,6 +62,7 @@ pub fn suspend_current_and_run_next() {
 pub const IDLE_PID: usize = 0;
 
 /// Exit the current 'Running' task and run the next task in task list.
+/// here we change the stride
 pub fn exit_current_and_run_next(exit_code: i32) {
     // take from Processor 取出，而不只是得到一份拷贝，这是为了正确维护进程控制块的引用计数；
     let task = take_current_task().unwrap();
@@ -122,7 +123,7 @@ pub fn add_initproc() {
 
 /// make an address map in user memory set
 pub fn insert_area(start_va: VirtAddr, end_va: VirtAddr, map_permission: MapPermission) -> isize {
-    let  task = current_task().unwrap();
+    let task = current_task().unwrap();
     let mut inner = task.inner_exclusive_access();
 
     debug!("insert_area: {:?} to {:?}", start_va, end_va);
@@ -142,7 +143,6 @@ pub fn insert_area(start_va: VirtAddr, end_va: VirtAddr, map_permission: MapPerm
 pub fn remove_area(start_va: VirtAddr, end_va: VirtAddr) -> isize {
     let task = current_task().unwrap();
     let mut inner = task.inner_exclusive_access();
-
 
     if inner.memory_set.is_gain(start_va, end_va) == false {
         debug!("not found area!");
