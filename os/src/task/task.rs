@@ -1,6 +1,8 @@
 //! Types related to task management & Functions for completely changing TCB
 
-use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle, SignalActions, SignalFlags, TaskContext};
+use super::{
+    kstack_alloc, pid_alloc, KernelStack, PidHandle, SignalActions, SignalFlags, TaskContext,
+};
 use crate::{
     config::TRAP_CONTEXT_BASE,
     fs::{File, Stdin, Stdout},
@@ -181,9 +183,47 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
-        // push arguments on user stack
+        
+        // // push arguments on user stack
+        // user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
+        // let argv_base = user_sp;
+        // // agrv 获取一系列引用
+        // let mut argv: Vec<_> = (0..=args.len())
+        //     .map(|arg| {
+        //         translated_refmut(
+        //             memory_set.token(),
+        //             (argv_base + arg * core::mem::size_of::<usize>()) as *mut usize,
+        //         )
+        //     })
+        //     .collect();
+        // *argv[args.len()] = 0;
+        // for i in 0..args.len() {
+        //     user_sp -= args[i].len() + 1;
+        //     *argv[i] = user_sp;
+        //     let mut p = user_sp;
+        //     for c in args[i].as_bytes() {
+        //         *translated_refmut(memory_set.token(), p as *mut u8) = *c;
+        //         p += 1;
+        //     }
+        //     *translated_refmut(memory_set.token(), p as *mut u8) = 0;
+        // }
+
+        // 计算需要的空间，先推入参数
+        for i in 0..args.len() {
+            user_sp -= args[i].len() + 1; // 加1是为了存储字符串末尾的null终止符
+        }
+        // 保存参数实际存储的基址
+        let argv_st = user_sp;
+
+        // make the user_sp aligned to 8B for k210 platform
+        user_sp -= user_sp % core::mem::size_of::<usize>(); 
+
+
         user_sp -= (args.len() + 1) * core::mem::size_of::<usize>();
+        // 保存参数引用的基址
         let argv_base = user_sp;
+
+        // 创建参数引用向量，比如第一项是对argv[0]所在地址空间的引用，后续我们需要修改其中的值指向argv[0]参数真实存储的地址。
         let mut argv: Vec<_> = (0..=args.len())
             .map(|arg| {
                 translated_refmut(
@@ -192,19 +232,33 @@ impl TaskControlBlock {
                 )
             })
             .collect();
-        *argv[args.len()] = 0;
+
+        // 将user_sp指向参数实际存储的起始地址
+        user_sp = argv_st;
         for i in 0..args.len() {
-            user_sp -= args[i].len() + 1;
+            // ! 这里实现了将argv[0]引用参数。
             *argv[i] = user_sp;
             let mut p = user_sp;
+            // 存储参数
             for c in args[i].as_bytes() {
                 *translated_refmut(memory_set.token(), p as *mut u8) = *c;
                 p += 1;
             }
             *translated_refmut(memory_set.token(), p as *mut u8) = 0;
+            user_sp += args[i].len() + 1;
         }
-        // make the user_sp aligned to 8B for k210 platform
-        user_sp -= user_sp % core::mem::size_of::<usize>();
+
+        *argv[args.len()] = 0;
+
+        // 重新将sp设置为栈顶
+        user_sp = argv_base;
+
+        // 在用户栈栈顶 push 参数个数
+        *translated_refmut(
+            memory_set.token(),
+            (user_sp - core::mem::size_of::<usize>()) as *mut usize,
+        ) = args.len().into();
+        user_sp -= core::mem::size_of::<usize>();
 
         // **** access current TCB exclusively
         let mut inner = self.inner_exclusive_access();
