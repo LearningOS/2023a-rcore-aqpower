@@ -62,6 +62,14 @@ const SYSCALL_WAITPID: usize = 260;
 const SYSCALL_SPAWN: usize = 400;
 /// taskinfo syscall
 const SYSCALL_TASK_INFO: usize = 410;
+/// set_tid_address syscall
+pub const SYSCALL_SET_TID_ADDRESS: usize = 96;
+/// itocl
+pub const SYSCALL_IOCTL: usize = 29;
+/// reads iovcnt buffers from the file
+pub const SYSCALL_WRITEV: usize = 66;
+/// call terminates all threads in the calling process's thread group.
+pub const SYSCALL_EXIT_GROUP: usize = 94;
 
 mod fs;
 mod process;
@@ -104,6 +112,10 @@ pub fn syscall(syscall_id: usize, args: [usize; 4]) -> isize {
         SYSCALL_SBRK => sys_sbrk(args[0] as i32),
         SYSCALL_SPAWN => sys_spawn(args[0] as *const u8),
         SYSCALL_SET_PRIORITY => sys_set_priority(args[0] as isize),
+        SYSCALL_SET_TID_ADDRESS => sys_getpid(),
+        SYSCALL_IOCTL => sys_ioctl(args[0]),
+        SYSCALL_WRITEV => sys_writev(args[0], args[1] as *mut Iovec, args[2] as usize),
+        SYSCALL_EXIT_GROUP => sys_exit(0),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }
